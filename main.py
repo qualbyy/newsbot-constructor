@@ -101,7 +101,12 @@ async def main():
         pass
     finally:
         logger.info("Остановка процессов...")
+        await master_dp.stop_polling()
         master_task.cancel()
+        try:
+            await master_task
+        except asyncio.CancelledError:
+            pass
         await manager.stop_all()
         await master_bot.session.close()
         logger.info("Все боты и соединения закрыты. До свидания!")
