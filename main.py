@@ -2,12 +2,15 @@ import sys
 import os
 
 # Автоматическое переключение на виртуальное окружение, если запущено через системный python
-VENV_PYTHON = os.path.expanduser("/home/qualbyy/TeakBot/venv/bin/python")
-if sys.executable != VENV_PYTHON and os.path.exists(VENV_PYTHON):
+local_venv = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "python")
+fallback_venv = os.path.expanduser("/home/qualbyy/TeakBot/venv/bin/python")
+target_python = local_venv if os.path.exists(local_venv) else (fallback_venv if os.path.exists(fallback_venv) else None)
+
+if target_python and sys.executable != target_python:
     try:
         import aiogram
     except ImportError:
-        os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
+        os.execv(target_python, [target_python] + sys.argv)
 
 import asyncio
 import logging

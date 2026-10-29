@@ -2,6 +2,7 @@
 
 Мощная модульная система на **Python 3** и **aiogram 3**, позволяющая на одном ПК/сервере создавать, хостить и тонко настраивать независимых Telegram-ботов для администраторов новостных каналов.
 
+Проект разработан для автоматизации публикации новостей: обработка медиа-альбомов, антифлуд, система банов, модерация предложки, интерактивное тегирование и многопользовательский хостинг.
 ---
 
 ## 🌟 Основные возможности
@@ -17,7 +18,7 @@
 - **Интерактивный выбор тегов (рубрик)**: выбор из настроенных рубрик канала (`#срочно`, `#технологии`, `#крипта` и т.д.), возможность отправить новость без тега или создать свой тег прямо на лету.
 - **Поддержка любых медиа**:
   - Одиночные фото, видео, GIF-анимации, документы, кружочки/голос.
-  - **Альбомы (Media Groups)** из нескольких фото и видео (сборка с таймером 1.0 сек, как в TeakBot).
+  - **Альбомы (Media Groups)** из нескольких фото и видео (автоматическая сборка с таймером).
 - **Интерактивное превью перед выходом**: бот присылает точный вид поста автору в ЛС перед публикацией.
 - **Инлайн-кнопки**: возможность прикрепить URL-кнопку к конкретному посту (например, *«Читать источник»*) или задать постоянную кнопку по умолчанию.
 - **Отложенный постинг**: планирование публикации через N минут с автоматической очередью в БД.
@@ -39,7 +40,7 @@
 ## 📂 Структура проекта
 
 ```
-newsbot_constructor/
+newsbot-constructor/
 ├── config.py              # Конфигурация мастер-бота и хостинга
 ├── database.py            # Асинхронная БД SQLite (боты, настройки, теги, админы, отложка)
 ├── publisher.py           # Движок сборки постов, форматирования и отправки в канал
@@ -47,6 +48,7 @@ newsbot_constructor/
 ├── manager.py             # BotManager (динамический запуск, остановка, пул ботов, планировщик)
 ├── master_bot.py          # Логика главного бота-конструктора (мастер создания, меню настроек)
 ├── main.py                # Точка входа сервера-хостинга
+├── run.sh                 # Скрипт быстрого запуска
 ├── requirements.txt       # Зависимости Python
 └── .env                   # Переменные окружения (токен мастер-бота)
 ```
@@ -55,14 +57,11 @@ newsbot_constructor/
 
 ## 🚀 Быстрый запуск
 
-### 1. Подготовка окружения
-Перейдите в папку проекта:
+### 1. Клонирование и подготовка окружения
 ```bash
-cd /home/qualbyy/.gemini/antigravity/scratch/newsbot_constructor
-```
+git clone https://github.com/qualbyy/newsbot-constructor.git
+cd newsbot-constructor
 
-Используйте существующий виртуальный venv (например, из TeakBot) или создайте новый:
-```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -77,22 +76,25 @@ nano .env
 Укажите:
 - `MASTER_BOT_TOKEN`: токен главного бота-конструктора, полученный у [@BotFather](https://t.me/BotFather).
 - `SUPERADMIN_ID`: ваш числовой Telegram ID (можно узнать у [@userinfobot](https://t.me/userinfobot)).
+- `DB_PATH`: путь к файлу БД (по умолчанию `news_constructor.db`).
 
 ### 3. Запуск
 ```bash
 python3 main.py
 ```
-*(Или `/home/qualbyy/TeakBot/venv/bin/python main.py`)*
+*(Или через `./run.sh`)*
 
 ---
 
 ## 🛠 Автозапуск 24/7 (systemd service на Linux)
 
-Чтобы хостинг работал постоянно в фоне и поднимался при включении ПК/сервера:
+Чтобы хостинг работал постоянно в фоне и запускался вместе с системой:
 
-1. Создайте unit-файл службы:
+### Вариант 1: Пользовательская служба (User Service, без sudo)
+1. Создайте каталог и unit-файл службы:
 ```bash
-sudo nano /etc/systemd/system/newsbots.service
+mkdir -p ~/.config/systemd/user
+nano ~/.config/systemd/user/newsbots.service
 ```
 
 2. Вставьте конфигурацию:
@@ -103,28 +105,60 @@ After=network.target
 
 [Service]
 Type=simple
-User=qualbyy
-WorkingDirectory=/home/qualbyy/.gemini/antigravity/scratch/newsbot_constructor
-ExecStart=/home/qualbyy/TeakBot/venv/bin/python main.py
+WorkingDirectory=%h/newsbot-constructor
+ExecStart=%h/newsbot-constructor/venv/bin/python %h/newsbot-constructor/main.py
 Restart=always
 RestartSec=5
-StandardOutput=append:/home/qualbyy/.gemini/antigravity/scratch/newsbot_constructor/constructor.log
-StandardError=append:/home/qualbyy/.gemini/antigravity/scratch/newsbot_constructor/constructor.log
+StandardOutput=append:%h/newsbot-constructor/constructor.log
+StandardError=append:%h/newsbot-constructor/constructor.log
+
+[Install]
+WantedBy=default.target
+```
+
+3. Активируйте и запустите службу:
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now newsbots.service
+```
+
+Проверить статус работы:
+```bash
+systemctl --user status newsbots.service
+```
+
+---
+
+### Вариант 2: Системная служба (System Service)
+1. Создайте unit-файл:
+```bash
+sudo nano /etc/systemd/system/newsbots.service
+```
+
+2. Вставьте конфигурацию, заменив `/path/to/newsbot-constructor` и `your_user` на ваши значения:
+```ini
+[Unit]
+Description=Telegram NewsBot Constructor and Hosting Service
+After=network.target
+
+[Service]
+Type=simple
+User=your_user
+WorkingDirectory=/path/to/newsbot-constructor
+ExecStart=/path/to/newsbot-constructor/venv/bin/python /path/to/newsbot-constructor/main.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/path/to/newsbot-constructor/constructor.log
+StandardError=append:/path/to/newsbot-constructor/constructor.log
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-3. Активируйте и запустите службу:
+3. Запустите:
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable newsbots
-sudo systemctl start newsbots
-```
-
-Проверить статус работы:
-```bash
-sudo systemctl status newsbots
+sudo systemctl enable --now newsbots.service
 ```
 
 ---
